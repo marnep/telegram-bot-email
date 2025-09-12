@@ -17,6 +17,7 @@ def get_code_from_email():
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
         mail.login(EMAIL_USER, EMAIL_PASS)
         mail.select("inbox")
+
         status, data = mail.search(None, "UNSEEN")
         mail_ids = data[0].split()
 
@@ -31,10 +32,20 @@ def get_code_from_email():
         if msg.is_multipart():
             for part in msg.walk():
                 if part.get_content_type() == "text/plain":
-                    body = part.get_payload(decode=True).decode()
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        try:
+                            body = payload.decode("utf-8")
+                        except UnicodeDecodeError:
+                            body = payload.decode("latin-1", errors="ignore")
                     break
         else:
-            body = msg.get_payload(decode=True).decode()
+            payload = msg.get_payload(decode=True)
+            if payload:
+                try:
+                    body = payload.decode("utf-8")
+                except UnicodeDecodeError:
+                    body = payload.decode("latin-1", errors="ignore")
 
         match = re.search(r"\b\d{6}\b", body)
         return match.group(0) if match else None
@@ -44,20 +55,21 @@ def get_code_from_email():
         return None
 
 def send_to_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message}
     try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        data = {"chat_id": CHAT_ID, "text": message}
         r = requests.post(url, data=data)
         if r.status_code == 200:
-            print("[INFO] Mensagem enviada para o Telegram.")
+            print("[INFO] Mensagem enviada para o Telegram com sucesso.")
         else:
-            print(f"[ERRO] Falha ao enviar mensagem. Código: {r.status_code}")
+            print(f"[ERRO] Falha ao enviar para o Telegram: {r.text}")
     except Exception as e:
-        print(f"[ERRO] Falha na requisição ao Telegram: {e}")
+        print(f"[ERRO] Falha no envio ao Telegram: {e}")
 
 if __name__ == "__main__":
+    print("[INFO] Iniciando bot...")
     while True:
         code = get_code_from_email()
         if code:
             send_to_telegram(f"📩 Código recebido: {code}")
-        time.sleep(30)
+        time.sleep(15)  # espera 15 segundos antes de checar de novo
