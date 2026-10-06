@@ -4,6 +4,9 @@ import re
 import requests
 import os
 import time
+import logging
+
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 
 # Variáveis de ambiente (Railway -> Variables)
 IMAP_SERVER = os.getenv("IMAP_SERVER", "imap.gmail.com")
@@ -13,9 +16,13 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 def get_code_from_email():
+    mail = None
     try:
-        mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+        logging.info("Conectando ao servidor IMAP...")
+        mail = imaplib.IMAP4_SSL(IMAP_SERVER, timeout=30)
+        logging.info("Autenticando no IMAP...")
         mail.login(EMAIL_USER, EMAIL_PASS)
+        logging.info("Consultando e-mails não lidos...")
         mail.select("inbox")
 
         status, data = mail.search(None, "UNSEEN")
@@ -51,20 +58,26 @@ def get_code_from_email():
         return match.group(0) if match else None
 
     except Exception as e:
-        print(f"[ERRO] Falha ao ler e-mail: {e}")
+        logging.error("Falha ao ler e-mail (%s). Nova tentativa em 15 segundos.", type(e).__name__)
         return None
+    finally:
+        if mail is not None:
+            try:
+                mail.shutdown()
+            except Exception:
+                pass
 
 def send_to_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         data = {"chat_id": CHAT_ID, "text": message}
-        r = requests.post(url, data=data)
+        r = requests.post(url, data=data, timeout=(10, 30))
         if r.status_code == 200:
             print("[INFO] Mensagem enviada para o Telegram com sucesso.")
         else:
             print(f"[ERRO] Falha ao enviar para o Telegram: {r.text}")
     except Exception as e:
-        print(f"[ERRO] Falha no envio ao Telegram: {e}")
+        logging.error("Falha no envio ao Telegram (%s).", type(e).__name__)
 
 if __name__ == "__main__":
     print("[INFO] Iniciando bot...")
